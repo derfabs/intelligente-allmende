@@ -6,6 +6,7 @@ import click
 import multiprocessing as mp
 from multiprocessing.connection import Connection
 import pygame
+from pyvidplayer import Video
 import time
 import torch
 import numpy as np
@@ -145,7 +146,10 @@ def pilImageToSurface(pil_image: Image) -> pygame.Surface:
 # yapf: disable
 @click.command()
 @click.option('--network',            help='model network pickle filename', type=click.Path(exists=True, file_okay=True, dir_okay=False), required=True)
+@click.option('--plan',               help='plan of all events in a yaml file', type=click.Path(exists=True, file_okay=True, dir_okay=False), required=True)
 @click.option('--window_dimensions',  help='width & height of the window, comma seperated', type=parse_dimensions, required=True)
+@click.option('--bar_width',          help='width of the bar in the center of the frame', type=int, default=0)
+@click.option('--video_dimensions',   help='width & height of the video, comma seperated (used for proportional scaling)', type=parse_dimensions, required=True)
 @click.option('--min_speed',          help='minimum speed (when the arduino sends 0)', type=float, required=True)
 @click.option('--max_speed',          help='maximum speed (when the arduino sends 1023)', type=float, required=True)
 @click.option('--serial_port',        help='serial port path', type=str, required=True)
@@ -155,7 +159,10 @@ def pilImageToSurface(pil_image: Image) -> pygame.Surface:
 # yapf: enable
 def stream(
         network: str,
+        plan: str,
         window_dimensions: Tuple[int, int],
+        bar_width: int,
+        video_dimensions: Tuple[int, int],
         min_speed: float,
         max_speed: float,
         serial_port: str,
@@ -198,6 +205,13 @@ def stream(
     generate_process.start()
     serial_process.start()
 
+    video = Video("videos/sample2.mp4")
+    video.set_volume(1.0)
+    video.set_size(image_dimensions)
+    video.pause()
+
+    start_time = time.time()
+
     current_surface: pygame.Surface = None
     try:
         while True:
@@ -207,6 +221,8 @@ def stream(
             # quite the loop when closed
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
+                    video.close()
+                    pygame.quit()
                     raise SystemExit
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_f:
@@ -221,15 +237,18 @@ def stream(
 
                 current_surface = pilImageToSurface(pil_image)
 
+            if (time.time() - start_time >= 5): video.resume()
+
             # draw current surface if avaliable
             if current_surface:
                 window.fill(0)
                 window.blit(
                     current_surface,
                     current_surface.get_rect(
-                        center=tuple(el / 2 for el in window_dimensions)
+                        center=tuple((0.75 * window_dimensions[0], 0.5 * window_dimensions[1]))
                         )
                     )
+                video.draw(window, (0, 0), force_draw=True)
             else:
                 window.fill(0)
 

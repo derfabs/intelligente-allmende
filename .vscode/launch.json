@@ -19,7 +19,10 @@
             "program": "stream.py",
             "args": [
                 "--network=models/ia_final.pkl",
-                "--window_dimensions=1024,1024",
+                "--plan=plan.yml",
+                "--window_dimensions=1024,512",
+                "--bar_width=30",
+                "--video_dimensions=1280,720",
                 "--serial_port=/dev/ttyACM0",
                 "--baudrate=115200",
                 "--min_speed=0.0",

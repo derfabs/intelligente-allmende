@@ -1,8 +1,10 @@
 from typing import Tuple, Union
 
+import os
 import math
 import serial
 import click
+import yaml
 import multiprocessing as mp
 from multiprocessing.connection import Connection
 import pygame
@@ -170,7 +172,82 @@ def stream(
     image_conn_parent, image_conn_child = mp.Pipe()
     serial_conn_parent, serial_conn_child = mp.Pipe()
 
-    image_dimensions = (min(window_dimensions), min(window_dimensions))
+    # calculate dimensions & positions
+    half_dimensions = (
+        int((window_dimensions[0] - bar_width) / 2), window_dimensions[1]
+        )
+    gan_pos = {
+        'width': min(half_dimensions),
+        'height': min(half_dimensions),
+        'x': int((half_dimensions[0] - min(half_dimensions)) / 2),
+        'y': int((half_dimensions[1] - min(half_dimensions)) / 2)
+        }
+    video_pos = {
+        'width':
+        half_dimensions[0] if video_dimensions[0] >= video_dimensions[1] else
+        int(video_dimensions[0] / video_dimensions[1] * half_dimensions[1]),
+        'height':
+        half_dimensions[1] if video_dimensions[0] <= video_dimensions[1] else
+        int(video_dimensions[1] / video_dimensions[0] * half_dimensions[0]),
+        'x':
+        0 if video_dimensions[0] >= video_dimensions[1] else (
+            int(
+                half_dimensions[0] - video_dimensions[0] / video_dimensions[1]
+                * half_dimensions[1]
+                ) / 2
+            ),
+        'y':
+        0 if video_dimensions[0] <= video_dimensions[1] else int((
+            half_dimensions[1]
+            - video_dimensions[1] / video_dimensions[0] * half_dimensions[0]
+            ) / 2)
+        }
+    right_half_x = half_dimensions[0] + bar_width
+
+    # load & process yaml file
+    with open(plan) as file:
+        events = yaml.safe_load(file)
+
+    def filter_events(event):
+        if 'time' in event and 'type' in event:
+            if event['type'] == 'video':
+                if not ('path' in event and os.path.exists(event['path'])):
+                    print(
+                        f'event: {event} from {plan} was discarded. "path" was either missing or invalid'
+                        )
+                    return False
+            elif event['type'] == 'reposition':
+                if not (
+                    'gan' in event and
+                    (event['gan'] == 'left' or event['gan'] == 'right')
+                    ):
+                    print(
+                        f'event: {event} from {plan} was discarded. "gan" was either missing or invalid (must either be "left" or "right")'
+                        )
+                    return False
+            elif event['type'] == 'text':
+                if not ('content' in event and 'duration' in event):
+                    print(
+                        f'event: {event} from {plan} was discarded. "content" & "duration" attributes are mandatory for text events'
+                        )
+                    return False
+            elif event['type'] == 'restart':
+                pass
+            else:
+                print(
+                    f'event: {event} from {plan} was discarded. type invalid'
+                    )
+                return False
+        else:
+            print(
+                f'event: {event} from {plan} was discarded. "time" & "type" attributes are mandatory'
+                )
+            return False
+
+        return True
+
+    events = list(filter(filter_events, events))
+
     # start processes
     generate_process = mp.Process(
         target=generate_frames,
@@ -195,53 +272,89 @@ def stream(
     generate_process.start()
     serial_process.start()
 
-    video = Video("videos/sample.mov")
-    video.set_volume(1.0)
-    video.set_size(image_dimensions)
-    video.pause()
+    # video = Video("videos/sample.mov")
+    # video.set_volume(1.0)
+    # video.set_size((video_pos['width'], video_pos['height']))
+    # video.pause()
 
     start_time = time.time()
 
     current_surface: pygame.Surface = None
+    video: Video = None
+    event_index = 0
+    gan_position = 'left'
     try:
         while True:
             # limit fps
             clock.tick(fps)
 
-            # quite the loop when closed
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    video.close()
+            # quit the loop when closed
+            for pygame_event in pygame.event.get():
+                if pygame_event.type == pygame.QUIT:
+                    if video: video.close()
                     pygame.quit()
                     raise SystemExit
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_f:
+                elif pygame_event.type == pygame.KEYDOWN:
+                    if pygame_event.key == pygame.K_f:
                         pygame.display.toggle_fullscreen()
 
-            # get new surface if avaliable
+            # get new gan image if avaliable
             if image_conn_parent.poll():
                 pil_image: Image = image_conn_parent.recv()
 
-                if pil_image.size != image_dimensions:
-                    pil_image = pil_image.resize(image_dimensions)
+                if pil_image.size != (gan_pos['width'], gan_pos['height']):
+                    pil_image = pil_image.resize(
+                        (gan_pos['width'], gan_pos['height'])
+                        )
 
                 current_surface = pilImageToSurface(pil_image)
 
-            if (time.time() - start_time >= 5): video.resume()
+            # get current event
+            if (int(time.time() - start_time) == events[event_index]['time']):
+                print(f'executing event {event_index}: {events[event_index]}')
+                if events[event_index]['type'] == 'restart':
+                    event_index = 0
+                    start_time = time.time()
+                else:
+                    if events[event_index]['type'] == 'video':
+                        if video: video.close()
+                        video = Video(events[event_index]['path'])
+                        video.set_volume(1.0)
+                        video.set_size(
+                            (video_pos['width'], video_pos['height'])
+                            )
+                    elif events[event_index]['type'] == 'reposition':
+                        gan_position = events[event_index]['gan']
+                    elif events[event_index]['type'] == 'text':
+                        pass
+                    elif events[event_index]['type'] == 'restart':
+                        event_index = 0
+                        start_time = time.time()
+
+                    event_index += 1
+                    if event_index >= len(events): event_index = 0
 
             # draw current surface if avaliable
             if current_surface:
                 window.fill(0)
                 window.blit(
                     current_surface,
-                    current_surface.get_rect(
-                        center=tuple((
-                            0.75 * window_dimensions[0],
-                            0.5 * window_dimensions[1]
-                            ))
+                    (
+                        gan_pos['x'] if gan_position == 'left' else
+                        gan_pos['x'] + right_half_x,
+                        gan_pos['y']
                         )
                     )
-                video.draw(window, (0, 0), force_draw=True)
+                if video:
+                    video.draw(
+                        window,
+                        (
+                            video_pos['x'] + right_half_x
+                            if gan_position == 'left' else video_pos['x'],
+                            video_pos['y']
+                            ),
+                        force_draw=True
+                        )
             else:
                 window.fill(0)
 

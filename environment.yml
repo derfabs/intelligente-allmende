@@ -32,3 +32,4 @@ dependencies:
       - pyserial==3.5
       - pymediainfo==6.0.1
       - ffpyplayer==4.5.0
+      - pyyaml==6.0

@@ -15,11 +15,7 @@ import numpy as np
 import dnnlib
 import legacy
 from PIL import Image as image
-from PIL.Image import Image
-
-
-def parse_dimensions(input: str) -> Tuple[str]:
-    return tuple(int(dim.strip()) for dim in input.split(','))
+from PIL.Image import Image  #
 
 
 def generate_frames(
@@ -113,7 +109,7 @@ def read_serial(
 
 def clamp(
         x: Union[float, int], min: Union[float, int], max: Union[float, int]
-    ) -> float:
+    ) -> Union[float, int]:
     if x < min: return min
     if x > max: return max
     return x
@@ -135,6 +131,14 @@ def pilImageToSurface(pil_image: Image) -> pygame.Surface:
         ).convert()
 
 
+def parse_dimensions(input: str) -> Tuple[str]:
+    return tuple(int(dim.strip()) for dim in input.split(','))
+
+
+def parse_color(input: str) -> Tuple[str]:
+    return tuple(clamp(int(dim.strip()), 0, 255) for dim in input.split(','))
+
+
 # yapf: disable
 @click.command()
 @click.option('--network',            help='model network pickle filename', type=click.Path(exists=True, file_okay=True, dir_okay=False), required=True)
@@ -149,9 +153,11 @@ def pilImageToSurface(pil_image: Image) -> pygame.Surface:
 @click.option('--fps',                help='how many frames/sec to render', type=int, default=60, show_default=True)
 @click.option('--seed',               help='starting seed', type=float, default=0.0, show_default=True)
 @click.option('--text_bottom',        help='by how many pixels is the text offset from the bottom of the window', type=int, default=30)
-@click.option('--text_color',         help='R, G, B color, comma seperated', type=parse_dimensions, default=(255, 255, 255))
+@click.option('--text_color',         help='R, G, B color, comma seperated', type=parse_color, default=(255, 255, 255))
 @click.option('--font_size',          help='what font to use', type=int, default=72)
+@click.option('--line_gap',           help='gap between text lines in pixels', type=int, default=0)
 @click.option('--font',               help='what font size to use', type=str, required=False)
+@click.option('--split_text',         help='split text at the bar so no text is diplayed at it', is_flag=True)
 # yapf: enable
 def stream(
         network: str,
@@ -168,6 +174,8 @@ def stream(
         text_bottom: int,
         text_color: Tuple[int],
         font_size: int,
+        line_gap: int,
+        split_text: bool,
         font: str = None
     ) -> None:
 
@@ -378,15 +386,36 @@ def stream(
                         force_draw=True
                         )
                 if current_text:
-                    bottom = text_bottom
-                    for image in reversed(current_text['images']):
-                        window.blit(
-                            image,
-                            ((window_dimensions[0] - image.get_size()[0]) / 2,
-                             window_dimensions[1] - bottom
-                             - image.get_size()[1])
-                            )
-                        bottom += image.get_size()[1]
+                    if bar_width and split_text:
+                        for index in range(2):
+                            bottom = text_bottom
+                            for image in reversed(current_text['images']):
+                                width, height = image.get_width() / 2, image.get_height()
+                                area = pygame.Rect((width * index, 0),
+                                                   (width, height))
+                                window.blit(
+                                    image,
+                                    ((
+                                        window_dimensions[0]
+                                        - image.get_width()
+                                        ) / 2 if index == 0 else
+                                     half_dimensions[0] + bar_width,
+                                     window_dimensions[1] - bottom
+                                     - image.get_height()),
+                                    area
+                                    )
+                                bottom += image.get_height() + line_gap
+                    else:
+                        bottom = text_bottom
+                        for image in reversed(current_text['images']):
+                            window.blit(
+                                image,
+                                ((window_dimensions[0] - image.get_size()[0])
+                                 / 2,
+                                 window_dimensions[1] - bottom
+                                 - image.get_size()[1])
+                                )
+                            bottom += image.get_size()[1] + line_gap
             else:
                 window.fill(0)
 

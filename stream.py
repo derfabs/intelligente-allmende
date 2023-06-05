@@ -48,22 +48,19 @@ def generate_frames(
 
     last_time = time.time()
     seed_lower = None
-    serial_input = 0
     speed = min_speed
+    current = 0
     while True:
         # get time past since last iteration
         interval = time.time() - last_time
         last_time = time.time()
 
-        if serial_connection.poll():
-            current = float(serial_connection.recv())
+        if serial_connection.poll(
+        ) and (new := float(serial_connection.recv())) != current:
+            current = new
             speed = min_speed + current * (max_speed - min_speed)
             print(current, '\t', speed)
         seed += interval * speed
-
-        if serial_connection.poll():
-            serial_input: int = serial_connection.recv()
-            print(serial_input)  # TODO: do something with serial output
 
         # generate latent vectors
         if seed_lower != math.floor(seed):
@@ -97,23 +94,16 @@ def read_serial(
     # setup serial
     ser = serial.Serial(serial_port, baudrate=baudrate, timeout=0.1)
 
-    message_sent = False
-
     while True:
         line = ser.readline()
         if line:
-            message_sent = False
             try:
                 current = map_range(
                     clamp(int(line.strip()), 0, 1023), 0.0, 1023.0, 0.0, 1.0
                     )
             except Exception:
                 current = 0
-
             serial_connection.send(current)
-        elif not message_sent:
-            print('problem with the serial connection')
-            message_sent = True
 
         # reset the serial buffer
         ser.reset_input_buffer()
@@ -205,7 +195,7 @@ def stream(
     generate_process.start()
     serial_process.start()
 
-    video = Video("videos/sample2.mp4")
+    video = Video("videos/sample.mov")
     video.set_volume(1.0)
     video.set_size(image_dimensions)
     video.pause()
@@ -245,7 +235,10 @@ def stream(
                 window.blit(
                     current_surface,
                     current_surface.get_rect(
-                        center=tuple((0.75 * window_dimensions[0], 0.5 * window_dimensions[1]))
+                        center=tuple((
+                            0.75 * window_dimensions[0],
+                            0.5 * window_dimensions[1]
+                            ))
                         )
                     )
                 video.draw(window, (0, 0), force_draw=True)

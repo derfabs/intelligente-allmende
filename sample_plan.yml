@@ -1,0 +1,22 @@
+- time: 5
+  type: video
+  path: videos/sample.mov
+- time: 20
+  type: reposition
+  gan: right
+- time: 30
+  type: text
+  duration: 5
+  content: |-
+    this is some sample content
+- time: 38
+  type: text
+  duration: 10
+  content: |-
+    it can have more than
+    one line
+- time: 66
+  type: reposition
+  gan: left
+- time: 70
+  type: restart

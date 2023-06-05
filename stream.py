@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Tuple, Union, Dict, List
 
 import os
 import math
@@ -148,6 +148,10 @@ def pilImageToSurface(pil_image: Image) -> pygame.Surface:
 @click.option('--baudrate',           help='baudrate of the serial connection', type=int, required=True)
 @click.option('--fps',                help='how many frames/sec to render', type=int, default=60, show_default=True)
 @click.option('--seed',               help='starting seed', type=float, default=0.0, show_default=True)
+@click.option('--text_bottom',        help='by how many pixels is the text offset from the bottom of the window', type=int, default=30)
+@click.option('--text_color',         help='R, G, B color, comma seperated', type=parse_dimensions, default=(255, 255, 255))
+@click.option('--font_size',          help='what font to use', type=int, default=72)
+@click.option('--font',               help='what font size to use', type=str, required=False)
 # yapf: enable
 def stream(
         network: str,
@@ -160,13 +164,23 @@ def stream(
         serial_port: str,
         baudrate: str,
         fps: int,
-        seed: float
+        seed: float,
+        text_bottom: int,
+        text_color: Tuple[int],
+        font_size: int,
+        font: str = None
     ) -> None:
 
     # setup pygame
     pygame.init()
     window = pygame.display.set_mode(window_dimensions)
     clock = pygame.time.Clock()
+
+    # load font
+    if not font in pygame.font.get_fonts():
+        print(f'font {font} is invalid or not installed')
+        font = None
+    font_renderer = pygame.font.SysFont(font, font_size)
 
     # setup pipes
     image_conn_parent, image_conn_child = mp.Pipe()
@@ -272,17 +286,13 @@ def stream(
     generate_process.start()
     serial_process.start()
 
-    # video = Video("videos/sample.mov")
-    # video.set_volume(1.0)
-    # video.set_size((video_pos['width'], video_pos['height']))
-    # video.pause()
-
     start_time = time.time()
 
     current_surface: pygame.Surface = None
     video: Video = None
     event_index = 0
     gan_position = 'left'
+    current_text: Dict[str, Union[int, List[pygame.Surface]]] = None
     try:
         while True:
             # limit fps
@@ -326,13 +336,25 @@ def stream(
                     elif events[event_index]['type'] == 'reposition':
                         gan_position = events[event_index]['gan']
                     elif events[event_index]['type'] == 'text':
-                        pass
-                    elif events[event_index]['type'] == 'restart':
-                        event_index = 0
-                        start_time = time.time()
+                        current_text = {
+                            'images': [
+                                font_renderer.render(line, True, text_color)
+                                for line in events[event_index]
+                                ['content'].split('\n')
+                                ],
+                            'duration':
+                            events[event_index]['duration'],
+                            'start':
+                            time.time()
+                            }
 
                     event_index += 1
                     if event_index >= len(events): event_index = 0
+
+            # delete text if duration is up
+            if current_text and time.time(
+            ) - current_text['start'] > current_text['duration']:
+                current_text = None
 
             # draw current surface if avaliable
             if current_surface:
@@ -355,6 +377,16 @@ def stream(
                             ),
                         force_draw=True
                         )
+                if current_text:
+                    bottom = text_bottom
+                    for image in reversed(current_text['images']):
+                        window.blit(
+                            image,
+                            ((window_dimensions[0] - image.get_size()[0]) / 2,
+                             window_dimensions[1] - bottom
+                             - image.get_size()[1])
+                            )
+                        bottom += image.get_size()[1]
             else:
                 window.fill(0)
 

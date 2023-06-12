@@ -19,11 +19,21 @@
             "program": "stream.py",
             "args": [
                 "--network=models/ia_final.pkl",
-                "--window_dimensions=1024,1024",
+                "--plan=plan.yml",
+                "--window_dimensions=1920,1080",
+                "--bar_width=30",
+                "--video_dimensions=1280,720",
                 "--serial_port=/dev/ttyACM0",
-                "--baudrate=115200",
-                "--min_speed=0.0",
-                "--max_speed=0.5"
+                "--baudrate=9600",
+                "--min_speed=0.2",
+                "--max_speed=0.5",
+                "--text_bottom=300",
+                "--text_color=255,255,255",
+                "--background_color=0,0,0",
+                "--font=notosans",
+                "--font_size=28",
+                "--line_gap=5",
+                "--split_text"
             ],
             "console": "integratedTerminal"
         }

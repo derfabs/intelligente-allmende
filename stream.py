@@ -154,6 +154,7 @@ def parse_color(input: str) -> Tuple[str]:
 @click.option('--seed',               help='starting seed', type=float, default=0.0, show_default=True)
 @click.option('--text_bottom',        help='by how many pixels is the text offset from the bottom of the window', type=int, default=30)
 @click.option('--text_color',         help='R, G, B color, comma seperated', type=parse_color, default=(255, 255, 255))
+@click.option('--background_color',   help='R, G, B color for the text background, comma seperated', type=parse_color, required=False)
 @click.option('--font_size',          help='what font to use', type=int, default=72)
 @click.option('--line_gap',           help='gap between text lines in pixels', type=int, default=0)
 @click.option('--font',               help='what font size to use', type=str, required=False)
@@ -176,7 +177,8 @@ def stream(
         font_size: int,
         line_gap: int,
         split_text: bool,
-        font: str = None
+        font: str = None,
+        background_color: Tuple[int] = None
     ) -> None:
 
     # setup pygame
@@ -185,8 +187,9 @@ def stream(
     clock = pygame.time.Clock()
 
     # load font
-    if not font in pygame.font.get_fonts():
+    if not font in (fonts := pygame.font.get_fonts()):
         print(f'font {font} is invalid or not installed')
+        print(f'font must be one of the following {fonts}')
         font = None
     font_renderer = pygame.font.SysFont(font, font_size)
 
@@ -331,6 +334,8 @@ def stream(
             if (int(time.time() - start_time) == events[event_index]['time']):
                 print(f'executing event {event_index}: {events[event_index]}')
                 if events[event_index]['type'] == 'restart':
+                    if video: video.close()
+                    video = None
                     event_index = 0
                     start_time = time.time()
                 else:
@@ -346,7 +351,7 @@ def stream(
                     elif events[event_index]['type'] == 'text':
                         current_text = {
                             'images': [
-                                font_renderer.render(line, True, text_color)
+                                font_renderer.render(line, True, text_color, background_color)
                                 for line in events[event_index]
                                 ['content'].split('\n')
                                 ],

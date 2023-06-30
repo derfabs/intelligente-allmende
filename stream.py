@@ -365,8 +365,8 @@ def stream(
                 current_text = None
 
             # draw current surface if avaliable
+            window.fill(0)
             if current_surface:
-                window.fill(0)
                 window.blit(
                     current_surface,
                     (
@@ -375,49 +375,44 @@ def stream(
                         gan_pos['y']
                         )
                     )
-                if video:
-                    video.draw(
-                        window,
-                        (
-                            video_pos['x'] + right_half_x
-                            if gan_position == 'left' else video_pos['x'],
-                            video_pos['y']
-                            ),
-                        force_draw=True
-                        )
-                if current_text:
-                    if bar_width and split_text:
-                        for index in range(2):
-                            bottom = text_bottom
-                            for image in reversed(current_text['images']):
-                                width, height = image.get_width() / 2, image.get_height()
-                                area = pygame.Rect((width * index, 0),
-                                                   (width, height))
-                                window.blit(
-                                    image,
-                                    ((
-                                        window_dimensions[0]
-                                        - image.get_width()
-                                        ) / 2 if index == 0 else
-                                     half_dimensions[0] + bar_width,
-                                     window_dimensions[1] - bottom
-                                     - image.get_height()),
-                                    area
-                                    )
-                                bottom += image.get_height() + line_gap
-                    else:
+            if video:
+                video.draw(
+                    window,
+                    (
+                        video_pos['x'] + right_half_x
+                        if gan_position == 'left' else video_pos['x'],
+                        video_pos['y']
+                        ),
+                    force_draw=True
+                    )
+            if current_text:
+                if bar_width and split_text:
+                    for index in range(2):
                         bottom = text_bottom
                         for image in reversed(current_text['images']):
+                            width, height = image.get_width() / 2, image.get_height()
+                            area = pygame.Rect((width * index, 0),
+                                               (width, height))
                             window.blit(
                                 image,
-                                ((window_dimensions[0] - image.get_size()[0])
-                                 / 2,
+                                ((window_dimensions[0] - image.get_width())
+                                 / 2 if index == 0 else half_dimensions[0]
+                                 + bar_width,
                                  window_dimensions[1] - bottom
-                                 - image.get_size()[1])
+                                 - image.get_height()),
+                                area
                                 )
-                            bottom += image.get_size()[1] + line_gap
-            else:
-                window.fill(0)
+                            bottom += image.get_height() + line_gap
+                else:
+                    bottom = text_bottom
+                    for image in reversed(current_text['images']):
+                        window.blit(
+                            image,
+                            ((window_dimensions[0] - image.get_size()[0]) / 2,
+                             window_dimensions[1] - bottom
+                             - image.get_size()[1])
+                            )
+                        bottom += image.get_size()[1] + line_gap
 
             # update window
             pygame.display.flip()
